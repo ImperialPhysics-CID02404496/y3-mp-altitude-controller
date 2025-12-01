@@ -1,7 +1,9 @@
 #include <xc.inc>
 
 extrn	UART_Setup, UART_Transmit_Message  ; external subroutines
-extrn USS_Setup, USS_sendPulse, USS_getReading, USS_calibrateReading 
+extrn USS_setup, USS_sendPulse, USS_getReading, USS_calibrateReading
+extrn USS_r1
+extrn kpd_setup, kpd_getReading
 extrn	LCD_Setup, LCD_Write_Message
 	
 psect	udata_acs   ; reserve data space in access ram
@@ -23,9 +25,19 @@ setup:
 	;call	LCD_Setup	; setup UART
 	goto	start
 	
+	;setup port E as output for testing output of USS
+	movlw   0x00 ; set all to 0 to rst 
+	movwf   TRISE, A; Port D all control outputs
+	movwf LATE,A ; port D latches off to start
+	
+	;setup port F as output for testing keypad
+	movwf   TRISF, A; Port D all control outputs
+	movwf LATF,A ; port D latches off to start
+	
 	; ******* Main programme ****************************************
 start: 	
     call USS_sendPulse
+   
     
     ; pause 100ms
     movlw 100

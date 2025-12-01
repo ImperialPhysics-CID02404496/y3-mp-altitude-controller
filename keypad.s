@@ -25,7 +25,7 @@ psect data
 charTable:
     db	0,1,2,3,4,5,6,7,8,9,'A','B','C','D','E','F'
 charTableLen EQU 16
-algin 2
+align 2
     
     
 psect USS_code, class=CODE
@@ -80,7 +80,7 @@ kpd_getReading:
     bsf RDPU ; Turn on pull-ups for Port D
     
     ;get input 
-    movf PORTD,W
+    movf PORTD,A
     movwf kpd_tmp_1,A
     
     ;switch nibbles
@@ -92,11 +92,11 @@ kpd_getReading:
     movwf LATD,A
     
     ;get input 
-    movf PORTD,W
+    movf PORTD,A
    
     ;and the input results together - store in kpd_r1
-    andwf kpd_tmp_1,W
-    movwf kpd_r1
+    andwf kpd_tmp_1,W,A
+    movwf kpd_r1,A
     
     return
     

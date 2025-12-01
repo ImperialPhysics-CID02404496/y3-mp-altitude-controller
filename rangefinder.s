@@ -1,7 +1,7 @@
 #include <xc.inc>
 
  ; share following methods with global progra
-global USS_Setup, USS_sendPulse, USS_getReading, USS_calibrateReading 
+global USS_setup, USS_sendPulse, USS_getReading, USS_calibrateReading 
     
 
 psect	udata_acs   ; reserve data space in access ram
@@ -10,7 +10,8 @@ USS_cnt_h:	ds 1   ; reserve 1 byte for variable LCD_cnt_h
 USS_cnt_ms:	ds 1   ; reserve 1 byte for ms counter
     
 USS_tmp: ds 1   ;temporary user reg
-    
+
+global USS_r1
 USS_r1: ds 1 ;1B for pulse duration
     
     
@@ -32,19 +33,23 @@ USS_setup:
 
     
     
-USS_sendPulse:
+USS_sendPulse: ;send 10us pulse
     ;set rd1 high for 20ms
     movlw 0x01
     movwf LATD,A
     
     ;10ms dly
-    movlw 10
-    call USS_delay_ms
+    movlw 3
+    call USS_delay_x4us
     
     ;set port rd1 low
     movlw 0x00
     movwf LATD,A
     return
+    
+    ; wait 20ms
+    movlw 20
+    call USS_delay_ms
     
 
 USS_getReading:
@@ -55,8 +60,15 @@ USS_getReading:
     ;send trigger
     call USS_sendPulse
     
+    ;wait until rd1 is high (return pulse has started)
+RD1_pause:
+    btfsc   PORTD, 1,A      ; Skip next instruction if RD1 == 1 (HIGH)
+    goto    RD1_check   ; If high ? exit loop
+    goto    RD1_pause ; If low ? stay in loop
+    
+    
 RD1_check:
-    btfsc   PORTD, 1        ; Test RD1 bit (skip next instruction if CLEAR)
+    btfsc   PORTD,1,A     ; Test RD1 bit (skip next instruction if CLEAR)
     goto    RD1_HIGH        ; If bit = 1 ? HIGH
 
     ; If execution gets here, RD1 = LOW
