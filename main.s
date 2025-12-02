@@ -3,6 +3,7 @@
 extrn	UART_Setup, UART_Transmit_Message  ; external subroutines
 extrn USS_setup, USS_sendPulse, USS_getReading, USS_calibrateReading
 extrn USS_r1
+extrn kpd_r1
 extrn kpd_setup, kpd_getReading
 extrn	LCD_Setup, LCD_Write_Message
 	
@@ -21,6 +22,7 @@ rst: 	org 0x0
 	
 setup:	
 	call USS_setup ;setup rangefinder
+	call kpd_setup
 	;call	UART_Setup	; setup UART
 	;call	LCD_Setup	; setup UART
 	goto	start
@@ -37,10 +39,15 @@ setup:
 	; ******* Main programme ****************************************
 start: 	
     call USS_sendPulse
+    
+    call kpd_getReading
+    
+    movff kpd_r1,LATF,A
+    
    
     
     ; pause 100ms
-    movlw 100
+    movlw 1000
     call delay_ms
     
     

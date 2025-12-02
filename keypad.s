@@ -2,6 +2,7 @@
 
  ; share following methods with global progra
 global kpd_setup, kpd_getReading
+global kpd_r1
     
 
 psect	udata_acs   ; reserve data space in access ram
@@ -96,6 +97,11 @@ kpd_getReading:
    
     ;and the input results together - store in kpd_r1
     andwf kpd_tmp_1,W,A
+    movwf kpd_tmp_2,A
+    
+    ;check against no input - don't wanna store no input
+    movlw 0
+    cpfseq kpd_tmp_2
     movwf kpd_r1,A
     
     return
