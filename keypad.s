@@ -2,116 +2,167 @@
 
  ; share following methods with global progra
 global kpd_setup, kpd_getReading
-global kpd_r1
+global kpd_buffer, kpd_index,kpd_tmp,kpd_tmp2
+ 
+; get lcd stuff to print onto screen
+
     
 
 psect	udata_acs   ; reserve data space in access ram
+
+kpd_index: ds 1	; current pos in key press store
+kpd_tmp: ds 1
+kpd_tmp2: ds 1
+    
+psect udata_bank4
+kpd_buffer: ds 10   ; stores up to 16 key presses
+    
 kpd_cnt_l:	ds 1   ; reserve 1 byte for variable LCD_cnt_l
 kpd_cnt_h:	ds 1   ; reserve 1 byte for variable LCD_cnt_h
 kpd_cnt_ms:	ds 1   ; reserve 1 byte for ms counter
     
 kpd_counter_1: ds 1 ; arbitrary counter
-    
-kpd_tmp_1: ds 1   ;temporary user reg
-kpd_tmp_2: ds 1
-    
-kpd_r1: ds 1 ;1B for pulse duration
-    
-psect udata_bank4 ;reserve data anywhere in RAM (at 0x400)
-kpd_inputs: ds 0x0A ;rsrv 10 bytes for input data
-kpd_charTable: ds 0x10 ;rsrv 16 bytes for char table
+;    
+;kpd_tmp_1: ds 1   ;temporary user reg
+;kpd_tmp_2: ds 1
 
-psect data
-; char table, data in program memory, and its length
+psect charTable_class, class=CODE, reloc=2
 charTable:
-    db	0,1,2,3,4,5,6,7,8,9,'A','B','C','D','E','F'
-charTableLen EQU 16
-align 2
-    
-    
+    db  '1','2','3','F'
+    db  '4','5','6','E'
+    db  '7','8','9','D'
+    db  'A','0','B','C'    
+
 psect USS_code, class=CODE
 kpd_setup:
     
     
     ;setup port J for keypad input. 
-    movlw   0x00 ; set all to 0 to rst 
-    movwf   TRISD, A; Port D all control outputs
-    movwf LATD,A ; port D latches off to start
+    movlw   0b11110000 ; set all to 0 to rst 
+    movwf   TRISJ, A; Port J all control outputs
+    movlw 0x00
+    movwf LATJ,A ; port J latches off to start
 
     movlb 0x0f ; PADCFG1 (and RDPU) are not in access Ram, switch to bank memory
-    bsf RDPU ; Turn on pull-ups for Port D
+    bsf RJPU ; Turn on pull-ups for Port D
     
-    ; setup flash memory
-    bcf	CFGS	; point to Flash program memory  
-    bsf	EEPGD 	; access Flash program memory
-    
-load_data:
-	;load chartable into RAM
-	lfsr	0, kpd_charTable	; Load FSR0 with address in RAM	
-	movlw	low highword(charTable)	; address of data in PM
-	movwf	TBLPTRU, A		; load upper bits to TBLPTRU
-	movlw	high(charTable)	; address of data in PM
-	movwf	TBLPTRH, A		; load high byte to TBLPTRH
-	movlw	low(charTable)	; address of data in PM
-	movwf	TBLPTRL, A		; load low byte to TBLPTRL
-	movlw	charTableLen	; bytes to read
-	movwf 	kpd_counter_1, A		; our counter register
-loop: 	tblrd*+			; one byte from PM to TABLAT, increment TBLPRT
-	movff	TABLAT, POSTINC0; move data from TABLAT to (FSR0), inc FSR0	
-	decfsz	kpd_counter_1, A		; count down to zero
-	bra	loop		; keep going until finished
-
     return
     
-    
-kpd_getReading:
-    ;set 0x0F (lowest nibble) as out HIGH. read 0xF0 (high nibble) as input
-    ;repeat with nibbles reversed so 0xF0 out HIGH, 0x0F input reading
-    ;merge to get binary code of input (in1 AND in2). save in reg.
-    
-    movlw 0xf0
-    movwf TRISD,A ;lowest nibble set to output. highest nibble set to input
-    
-    ;set out to high
-    movlw 0x0f
-    movwf LATD,A
-    
-    ;setup inputs
-    movlb 0x0f ; PADCFG1 (and RDPU) are not in access Ram, switch to bank memory
-    bsf RDPU ; Turn on pull-ups for Port D
-    
-    ;get input 
-    movf PORTD,A
-    movwf kpd_tmp_1,A
-    
-    ;switch nibbles
-    movlw 0x0f
-    movwf TRISD,A ;lowest nibble set to output. highest nibble set to input
-    
-    ;set out to high
-    movlw 0xf0
-    movwf LATD,A
-    
-    ;get input 
-    movf PORTD,A
    
-    ;and the input results together - store in kpd_r1
-    andwf kpd_tmp_1,W,A
-    movwf kpd_tmp_2,A
-    
-    ;check against no input - don't wanna store no input
-    movlw 0
-    cpfseq kpd_tmp_2
-    movwf kpd_r1,A
-    
-    return
-    
-    
-USS_calibrateReading:
-    ; TODO convert time duration to distance using distance = duration * speed of sound
-    ; USS_r1 has duration of pulse in ms = 2 * distance * speed of sound
-    
+kpd_getReading:
 
+    ; --- No key by default ---
+    clrf kpd_tmp, A
+
+    ; -------- Row 0 --------
+    movlw 0b11111110     ; J0=0, J1-3=1, J4-7 inputs
+    movwf LATJ, A
+    call kpd_scanRow
+    movf kpd_tmp, W, A
+    bnz keyFoundRow0
+
+    ; -------- Row 1 --------
+    movlw 0b11111101
+    movwf LATJ, A
+    call kpd_scanRow
+    movf kpd_tmp, W, A
+    bnz keyFoundRow1
+
+    ; -------- Row 2 --------
+    movlw 0b11111011
+    movwf LATJ, A
+    call kpd_scanRow
+    movf kpd_tmp, W, A
+    bnz keyFoundRow2
+
+    ; -------- Row 3 --------
+    movlw 0b11110111
+    movwf LATJ, A
+    call kpd_scanRow
+    movf kpd_tmp, W, A
+    bnz keyFoundRow3
+
+    return             ; no key pressed
+
+
+; ========== ROW-based decode ==========
+keyFoundRow0:
+    ; kpd_tmp = column (1?4)
+    ; Key number = (row*4 + col)
+    movf kpd_tmp, W, A       ; row 0 ? key = col
+    bra storeKey
+
+keyFoundRow1:
+    movf kpd_tmp, W, A
+    addlw 4
+    bra storeKey
+
+keyFoundRow2:
+    movf kpd_tmp, W, A
+    addlw 8
+    bra storeKey
+
+keyFoundRow3:
+    movf kpd_tmp, W, A
+    addlw 12
+    ; fall through
+
+
+; ========== STORE KEY IN BUFFER ==========
+storeKey:
+    ; W = key number (1?16)
+    decf WREG, W, A          ; convert to 0?15 for table lookup
+
+    ; Load ASCII from charTable
+    movlw low charTable
+    movwf TBLPTRL, A
+    movlw high charTable
+    movwf TBLPTRH, A
+    movlw highword charTable
+    movwf TBLPTRU, A
+
+    addwf TBLPTRL, F, A      ; add offset, table entries are single byte
+    tblrd*                  ; read ASCII into TABLAT
+
+    ; Store ASCII into kpd_buffer[kpd_index]
+    lfsr 0, kpd_buffer
+    movf kpd_index, W, A
+    addwf FSR0L, F, A
+    movff TABLAT, INDF0
+
+    ; Increment index (simple wrap at 10 chars)
+    incf kpd_index, F, A
+    movlw 10
+    cpfsgt kpd_index, A
+    bra noWrap
+    clrf kpd_index, A
+noWrap:
+
+    ; Simple debounce delay
+    movlw 20
+    call kpd_delay_ms
+
+    return
+
+
+
+; ============================================================
+; Support routine: returns column number in kpd_tmp (1?4) or 0
+; ============================================================
+kpd_scanRow:
+    clrf kpd_tmp, A
+
+    btfss PORTJ, 4, A
+    movlw 1
+    btfss PORTJ, 5, A
+    movlw 2
+    btfss PORTJ, 6, A
+    movlw 3
+    btfss PORTJ, 7, A
+    movlw 4
+
+    movwf kpd_tmp, A
+    return
     
     
 ; ** a few delay routines below here****

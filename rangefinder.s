@@ -34,22 +34,22 @@ USS_setup:
     
     
 USS_sendPulse: ;send 10us pulse
-    ;set rd1 high for 20ms
+    ;set rd0 high for 10ms
     movlw 0x01
     movwf LATD,A
     
     ;10ms dly
-    movlw 3
-    call USS_delay_x4us
+    movlw 10
+    call USS_delay_ms
     
-    ;set port rd1 low
+    ;set port rd0 low
     movlw 0x00
     movwf LATD,A
     return
     
-    ; wait 20ms
-    movlw 20
-    call USS_delay_ms
+;    ; wait 10ms
+;    movlw 10
+;    call USS_delay_ms
     
 
 USS_getReading:
@@ -60,12 +60,11 @@ USS_getReading:
     ;send trigger
     call USS_sendPulse
     
+    ; TODO program gets stuck on this pause?
     ;wait until rd1 is high (return pulse has started)
 RD1_pause:
-    btfsc   PORTD, 1,A      ; Skip next instruction if RD1 == 1 (HIGH)
-    goto    RD1_check   ; If high ? exit loop
+    btfss   PORTD, 1,A      ; Skip next instruction if RD1 == 1 (HIGH)
     goto    RD1_pause ; If low ? stay in loop
-    
     
 RD1_check:
     btfsc   PORTD,1,A     ; Test RD1 bit (skip next instruction if CLEAR)
@@ -77,25 +76,63 @@ RD1_LOW:
     goto    CONTINUE
 
 RD1_HIGH:
-    ; signal on, increment counter and wait 1ms before checking again
+    ; signal on, increment counter and wait 100us before checking again
     incf USS_tmp, A
     
-    movlw 1
-    call USS_delay_ms
+    movlw 25
+    call USS_delay_x4us
     
     goto RD1_check
 
 CONTINUE:
-    movff USS_r1,USS_tmp,A  ;move temp reading to r1 as read pulse duration
+    movff USS_tmp,USS_r1,A  ;move temp reading to r1 as read pulse duration
     
     return
     
     
     
 USS_calibrateReading:
-    ; TODO convert time duration to distance using distance = duration * speed of sound
-    ; USS_r1 has duration of pulse in ms = 2 * distance * speed of sound
-    
+;    ; TODO convert time duration to distance using distance = duration * speed of sound
+;    ; USS_r1 has duration of pulse in ms = 2 * distance * speed of sound
+;    ; W = USS_r1 (count)
+;    movf    USS_r1, A
+;
+;    ; place multiplier (55) into a temp file reg (use USS_cnt_h as temporary constant)
+;    movlw   55
+;    movwf   USS_cnt_h, A
+;
+;    ; multiply W * USS_cnt_h -> 16-bit product in PRODH:PRODL
+;    mulwf   USS_cnt_h,A        ; PRODH:PRODL = W * USS_cnt_h
+;
+;    ; divide product by 32 -> shift right 5 bits
+;    ; Do 5 times: shift low byte right with carry from high byte, then shift high byte right
+;    ; Note: rr f,d rotates right through carry. We'll do it on PRODL and PRODH
+;    ; Shift 1
+;    rrf     PRODL, F
+;    rrf     PRODH, F  
+;    ; Shift 2
+;    rrf     PRODL, F
+;    rrf     PRODH, F
+;    ; Shift 3
+;    rrf     PRODL, F
+;    rrf     PRODH, F
+;    ; Shift 4
+;    rrf     PRODL, F
+;    rrf     PRODH, F
+;    ; Shift 5
+;    rrf     PRODL, F
+;    rrf     PRODH, F
+;
+;    ; Now PRODL contains (count * 55) >> 5
+;    ; Store result low byte into USS_r1 (calibrated cm)
+;    movff   PRODL, USS_r1
+;
+;    return
+;    
+   ; freaky simply approx
+    movf    USS_r1, W,A
+    addwf   USS_r1, F, A   ; r1 = r1 * 2
+    return
 
     
     
