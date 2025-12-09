@@ -5,7 +5,10 @@ extrn USS_setup, USS_sendPulse, USS_getReading, USS_calibrateReading
 extrn USS_r1
 extrn kpd_buffer, kpd_index
 extrn kpd_setup, kpd_getReading
-extrn	LCD_Setup, LCD_Write_Message,LCD_rst,LCD_UpdateDisplay
+extrn	LCD_Setup, LCD_Write_Message,LCD_clr,LCD_setPos,LCD_Send_Byte_D
+extrn LCD_Write_Number
+
+global dy
 	
 psect	udata_acs   ; reserve data space in access ram
 dly_cnt_l:	ds 1   ; reserve 1 byte for delay low counter
@@ -13,16 +16,28 @@ dly_cnt_h:	ds 1   ; reserve 1 byte for delay high counter
 dly_cnt_ms:	ds 1   ; reserve 1 byte for delay ms counter
     
 counter:    ds 1    ; reserve one byte for arbitrary  counter variable
+    
+dy: ds 1    
 
-;psect udata_bank4
-;    kpd_charTable: ds 16 ;rsrv 16 bytes for char table
+    
+LCD_USS_Table_len   EQU 7   ; "height:"
+LCD_KPD_Table_len   EQU 6   ; "input:"
+    
+LCD_number_bank: ds 10
+
+psect udata_bank4
+    LCD_USS_Table_RAM:   ds LCD_USS_Table_len
+    LCD_KPD_Table_RAM:   ds LCD_KPD_Table_len
+    
+    kpd_charTable: ds 16 ;rsrv 16 bytes for char table
 ;
-;psect data
-;; char table, data in program memory, and its length
-;charTable:
-;    db	0,1,2,3,4,5,6,7,8,9,'A','B','C','D','E','F'
-;charTableLen EQU 16
-;align 2
+psect data
+LCD_USS_Table:
+    db 'h','e','i','g','h','t',':'
+LCD_KPD_Table:
+    db 'i','n','p','u','t',':'
+
+
     
     
 psect	code, abs	
@@ -33,62 +48,35 @@ rst: 	org 0x0
 setup:	
 	call USS_setup ;setup rangefinder
 	call kpd_setup
-	;call	UART_Setup	; setup UART
 	call	LCD_Setup	; setup UART
-	call LCD_rst
-	goto	start
 	
-	;setup port E as output for testing output of USS
-	movlw   0x00 ; set all to 0 to rst 
-	movwf   TRISE, A; Port D all control outputs
-	movwf LATE,A ; port D latches off to start
-	
-	;setup port F as output for testing keypad
-	movwf   TRISH, A; Port D all control outputs
-	movwf LATH,A ; port D latches off to start
+	call LCD_clr
 	
 	 ; setup flash memory
     bcf	CFGS	; point to Flash program memory  
     bsf	EEPGD 	; access Flash program memory
     
+    goto	start
     
 
-;# load_data:
-;# 	;load chartable into RAM
-;# 	lfsr	0, kpd_charTable	; Load FSR0 with address in RAM	
-;# 	movlw	low highword(charTable)	; address of data in PM
-;# 	movwf	TBLPTRU, A		; load upper bits to TBLPTRU
-;# 	movlw	high(charTable)	; address of data in PM
-;# 	movwf	TBLPTRH, A		; load high byte to TBLPTRH
-;# 	movlw	low(charTable)	; address of data in PM
-;# 	movwf	TBLPTRL, A		; load low byte to TBLPTRL
-;# 	movlw	charTableLen	; bytes to read
-;# 	movwf 	kpd_counter_1, A		; our counter register
-;# loop: 	tblrd*+			; one byte from PM to TABLAT, increment TBLPRT
-;# 	movff	TABLAT, POSTINC0; move data from TABLAT to (FSR0), inc FSR0	
-;# 	decfsz	kpd_counter_1, A		; count down to zero
-;# 	bra	loop		; keep going until finished
-;# 
-;#     return
-	
 	; ******* Main programme ****************************************
 start: 	
+    ;sensor readings
     call USS_getReading
     call USS_calibrateReading
     
+    ; keypad readings
     call kpd_getReading
     
-    call LCD_UpdateDisplay
-
-   
+    ;print on lcd
+    movlw 0
+    call LCD_setPos
+    movf USS_r1,W,A
+    call LCD_Write_Number
     
-    ; pause 100ms
-    ;movlw 200
-    ;call delay_ms
-    ;movlw 100
-    ;call delay_ms
-    ;movlw 100
-    ;call delay_ms
+    ;output to dac
+    
+ 
 
     
     goto start
