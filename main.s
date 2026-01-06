@@ -1,12 +1,17 @@
 #include <xc.inc>
+;import modules
+extrn dac_setup, dac_setOutput
+extrn USS_setup, USS_getReading, USS_calibrateReading
+;extrn kpd_setup, kpd_getReading
+extrn LCD_Setup, LCD_Write_Message,LCD_clr,LCD_setPos,LCD_Send_Byte_D
+extrn LCD_Write_Number
+extrn pwm_setup,pwm_setDuty
+extrn motor_init, motor_enable, motor_disable, motor_forward
+extrn motor_reverse, motor_stop, motor_brake
 
-extrn	UART_Setup, UART_Transmit_Message  ; external subroutines
-extrn USS_setup, USS_sendPulse, USS_getReading, USS_calibrateReading
+;import variables
 extrn USS_r1
 extrn kpd_buffer, kpd_index
-extrn kpd_setup, kpd_getReading
-extrn	LCD_Setup, LCD_Write_Message,LCD_clr,LCD_setPos,LCD_Send_Byte_D
-extrn LCD_Write_Number
 
 global dy
 	
@@ -16,7 +21,11 @@ dly_cnt_h:	ds 1   ; reserve 1 byte for delay high counter
 dly_cnt_ms:	ds 1   ; reserve 1 byte for delay ms counter
     
 counter:    ds 1    ; reserve one byte for arbitrary  counter variable
+tmp: ds 1
     
+TempIdx: ds 1 ;used for printing kpd buff
+    
+h_wanted: ds 1
 dy: ds 1    
 
     
@@ -29,7 +38,10 @@ psect udata_bank4
     LCD_USS_Table_RAM:   ds LCD_USS_Table_len
     LCD_KPD_Table_RAM:   ds LCD_KPD_Table_len
     
-    kpd_charTable: ds 16 ;rsrv 16 bytes for char table
+    
+    LetterTable: ds 1   ; temporary 1-byte table for letters (printing kpd buff)
+    
+
 ;
 psect data
 LCD_USS_Table:
@@ -47,14 +59,20 @@ rst: 	org 0x0
 	
 setup:	
 	call USS_setup ;setup rangefinder
-	call kpd_setup
+	call dac_setup
+	;call pwm_setup
+	;call motor_init
+	;call sw_pwm_init
+	;call kpd_setup
 	call	LCD_Setup	; setup UART
 	
+	;call motor_enable
+	;call motor_forward
 	call LCD_clr
 	
 	 ; setup flash memory
-    bcf	CFGS	; point to Flash program memory  
-    bsf	EEPGD 	; access Flash program memory
+    ;bcf	CFGS	; point to Flash program memory  
+    ;bsf	EEPGD 	; access Flash program memory
     
     goto	start
     
@@ -65,8 +83,6 @@ start:
     call USS_getReading
     call USS_calibrateReading
     
-    ; keypad readings
-    call kpd_getReading
     
     ;print on lcd
     movlw 0
@@ -74,16 +90,38 @@ start:
     movf USS_r1,W,A
     call LCD_Write_Number
     
-    ;output to dac
+    ;get input - kpd doesnt work so we shall consider arbitrary height
+    movlw 65
+    movf h_wanted,A
     
- 
+    ;configure and output to dac
+    call configure_height
+    ;movlw 255
+    call dac_setOutput
 
-    
+    movlw 200
+    call delay_ms
+ 
     goto start
 
 
-	
-	
+
+; Inputs:
+;   WREG = DESIRED height
+;   CURRENT_HEIGHT = current height (8-bit)
+; Output:
+;   WREG = (DESIRED - CURRENT) + 128       ; range 0..255
+
+configure_height:
+    MOVWF tmp, A          ; tmp = DESIRED
+
+    MOVF USS_r1, W, A   ; W = CURRENT
+    SUBWF tmp, W, A        ; W = tmp - W = DESIRED - CURRENT   (signed diff in W)
+
+    ; Now add 128 offset
+    ;ADDLW 128              ; W = (DESIRED - CURRENT) + 128
+
+    RETURN
 	
 ; ** a few delay routines below here as LCD timing can be quite critical ****
 delay_ms:		    ; delay given in ms in W
